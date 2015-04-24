@@ -1,49 +1,50 @@
 import { QuickFix, QuickFixQueryInformation, Refactoring} from "./quickFix";
-import * as ts from "typescript";
 import * as ast from "./astUtils";
 import {EOL } from "os";
-import { displayPartsToString, typeToDisplayParts } from "typescript";
+var { displayPartsToString, typeToDisplayParts } = ts;
+import path = require('path');
+import {Project} from "../core/project";
 
-import {getExternalModuleNames } from "../modules/getExternalModules";
+import {getPathCompletions} from "../modules/getPathCompletions";
 
-function getIdentifierAndFileNames(error: ts.Diagnostic, getRelativePathsInProject: Function) {
+function getIdentifierAndFileNames(error: ts.Diagnostic, project: Project) {
 
     var errorText: string = <any>error.messageText;
+
+    // We don't support error chains yet
     if (typeof errorText !== 'string') {
-        console.error('I have no idea what this is:', errorText);
         return undefined;
     };
 
     var match = errorText.match(/Cannot find name \'(\w+)\'./);
 
-    // Happens when the type name is an alias. We can't refactor in this case anyways
+    // If for whatever reason the error message doesn't match
     if (!match) return;
+
     var [, identifierName] = match;
-    var {files} = getRelativePathsInProject({ filePath: error.file.fileName, prefix: identifierName, includeExternalModules: false });
+    var {files} = getPathCompletions({
+        project,
+        filePath: error.file.fileName,
+        prefix: identifierName,
+        includeExternalModules: false });
     var file = files.length > 0 ? files[0].relativePath : undefined;
     var basename = files.length > 0 ? files[0].name : undefined;
-    return {identifierName,file,basename };
+    return { identifierName, file, basename };
 }
 
 class AddImportStatement implements QuickFix {
     key = AddImportStatement.name;
-    constructor(private getRelativePathsInProject: Function) {
+
+    constructor() {
     }
+
     canProvideFix(info: QuickFixQueryInformation): string {
         var relevantError = info.positionErrors.filter(x=> x.code == 2304)[0];
         if (!relevantError) return;
         if (info.positionNode.kind !== ts.SyntaxKind.Identifier) return;
 
-        // TODO: use type checker to see if item of `.` before hand is a class
-        //  But for now just run with it.
-
-        // var match = getIdentifierAndFileNames(relevantError);
-        //
-        // if(!match) return;
-        //
-        // var {identifierName, className} = match;
-        var { identifierName, file} = getIdentifierAndFileNames(relevantError, this.getRelativePathsInProject);
-        return file?`import ${identifierName}= require(\"${file}\")`: undefined;
+        var { identifierName, file} = getIdentifierAndFileNames(relevantError, info.project);
+        return file ? `import ${identifierName}= require(\"${file}\")` : undefined;
     }
 
     provideFix(info: QuickFixQueryInformation): Refactoring[] {
@@ -51,57 +52,34 @@ class AddImportStatement implements QuickFix {
         var identifier = <ts.Identifier>info.positionNode;
 
         var identifierName = identifier.text;
-        var fileNameforFix = getIdentifierAndFileNames(relevantError, this.getRelativePathsInProject);
-        // // Get the type of the stuff on the right if its an assignment
-        // var typeString = 'any';
-        // var parentOfParent = identifier.parent.parent;
-        // if (parentOfParent.kind == ts.SyntaxKind.BinaryExpression
-        //     && (<ts.BinaryExpression>parentOfParent).operatorToken.getText().trim() == '=') {
-        //
-        //     let binaryExpression = <ts.BinaryExpression>parentOfParent;
-        //     var type = info.typeChecker.getTypeAtLocation(binaryExpression.right);
-        //
-        //     /** Discoverd from review of `services.getQuickInfoAtPosition` */
-        //     typeString = displayPartsToString(typeToDisplayParts(info.typeChecker, type)).replace(/\s+/g, ' ');
-        // }
-        //
-        // // Find the containing class declaration
-        // var memberTarget = ast.getNodeByKindAndName(info.program, ts.SyntaxKind.ClassDeclaration, "errr");
-        // // if (!memberTarget) {
-        // //     // Find the containing interface declaration
-        // //     memberTarget = ast.getNodeByKindAndName(info.program, ts.SyntaxKind.InterfaceDeclaration, className);
-        // // }
-        // if (!memberTarget) {
-        //     return [];
-        // }
-        //
-        // // The following code will be same (and typesafe) for either class or interface
-        // let targetDeclaration = <ts.ClassDeclaration|ts.InterfaceDeclaration>memberTarget;
-        //
-        // // Then the first brace
-        // let firstBrace = targetDeclaration.getChildren().filter(x=> x.kind == ts.SyntaxKind.OpenBraceToken)[0];
-        //
-        // // And the correct indent
-        // var indentLength = info.service.getIndentationAtPosition(
-        //     info.srcFile.fileName, 0, info.project.projectFile.project.formatCodeOptions);
-        var indent = ''; //Array(indentLength + info.project.projectFile.project.formatCodeOptions.IndentSize + 1).join(' ');
+        var fileNameforFix = getIdentifierAndFileNames(relevantError, info.project);
 
-        if(fileNameforFix.basename !== identifierName){
-            atom.notifications.addError('AtomTS: QuickFix failed, text under cursor does not match filename');
-            return [];
-        }
-
-        // And add stuff after the first brace
-        let refactoring: Refactoring = {
+        // Add stuff at the top of the file
+        let refactorings: Refactoring[] = [{
             span: {
                 start: 0,
                 length: 0
             },
-            newText: `${indent }import ${identifierName} = require(\"${fileNameforFix.file}\");${EOL}`,
-            filePath:info.srcFile.fileName
-        };
+            newText: `import ${identifierName} = require(\"${fileNameforFix.file}\");${EOL}`,
+            filePath: info.srcFile.fileName
+        }];
 
-        return [refactoring];
+        // Also refactor the variable name to match the file name
+        // TODO: the following code only takes into account location
+        // There may be other locations where this is used.
+        // Better that they trigger a *rename* explicitly later if they want to rename the variable
+        // if (identifierName !== fileNameforFix.basename) {
+        //     refactorings.push({
+        //         span: {
+        //             start: identifier.getStart(),
+        //             length: identifier.end - identifier.getStart()
+        //         },
+        //         newText: fileNameforFix.basename,
+        //         filePath: info.srcFile.fileName
+        //     })
+        // }
+
+        return refactorings;
     }
 }
 

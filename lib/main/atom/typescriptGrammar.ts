@@ -1,12 +1,10 @@
-///ts:ref=globals
-/// <reference path="../../globals.ts"/> ///ts:ref:generated
+
 
 // Help:
 // https://github.com/atom/first-mate/
 // https://github.com/fdecampredon/brackets-typescript/blob/master/src/main/mode.ts
 // https://github.com/p-e-w/language-javascript-semantic/blob/master/lib/javascript-semantic-grammar.coffee
 
-import ts = require('typescript');
 import TokenClass = ts.TokenClass;
 
 declare class AtomTSBaseGrammar {

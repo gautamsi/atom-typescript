@@ -1,5 +1,3 @@
-///ts:ref=globals
-/// <reference path="../../globals.ts"/> ///ts:ref:generated
 var simpleValidator = require('./simpleValidator');
 var types = simpleValidator.types;
 var compilerOptionsValidation = {
@@ -49,7 +47,6 @@ function errorWithDetails(error, details) {
 var fs = require('fs');
 var path = require('path');
 var expand = require('glob-expand');
-var ts = require('typescript');
 var os = require('os');
 var formatting = require('./formatting');
 var projectFileName = 'tsconfig.json';

@@ -1,5 +1,4 @@
-///ts:ref=globals
-/// <reference path="../../globals.ts"/> ///ts:ref:generated
+
 
 import simpleValidator = require('./simpleValidator');
 var types = simpleValidator.types;
@@ -144,7 +143,6 @@ function errorWithDetails<T>(error: Error, details: T): Error {
 import fs = require('fs');
 import path = require('path');
 import expand = require('glob-expand');
-import ts = require('typescript');
 import os = require('os');
 import formatting = require('./formatting');
 
